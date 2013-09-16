@@ -23,6 +23,7 @@
 
 package com.iwares.lib.booster.core;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.ReferenceQueue;
@@ -59,6 +60,8 @@ import com.iwares.lib.booster.support.SQLiteCache;
 public class BitmapResolver {
 
 	private static final WeakHashMap<String, BitmapResolver> mResolverMap = new WeakHashMap<String, BitmapResolver>();
+
+	private static final String ANDROID_ASSET = "/android_asset/";
 
 	public static BitmapResolver obtain(Context appContext, String pathName) {
 		BitmapResolver resolver = mResolverMap.get(pathName);
@@ -260,7 +263,7 @@ public class BitmapResolver {
 
 		public void removeCallback(Callback callback) {
 			mCallbacks.remove(callback);
-			if (!mCallbacks.isEmpty() || getStatus() != Status.PENDING)
+			if (!mCallbacks.isEmpty())
 				return;
 			cancel(false);
 		}
@@ -298,7 +301,7 @@ public class BitmapResolver {
 		// HTTP URI.
 		if (SCHEME_HTTP.equalsIgnoreCase(scheme)) {
 			HttpResolveTask task = mHttpResolveTasks.get(name);
-			if (task == null || task.getStatus() == Status.FINISHED) {
+			if (task == null || task.isCancelled() || task.getStatus() == Status.FINISHED) {
 				// No task for this URI is running, create a new one.
 				task = new HttpResolveTask(uri);
 				mHttpResolveTasks.put(name, task);
@@ -312,15 +315,19 @@ public class BitmapResolver {
 
 		// Local URI.
 		try {
-			if (false
-				|| ContentResolver.SCHEME_CONTENT.equals(scheme)
-				|| ContentResolver.SCHEME_FILE.equals(scheme)
-				) {
+			if (ContentResolver.SCHEME_CONTENT.equals(scheme)) {
 				InputStream istream = mContext.getContentResolver().openInputStream(uri);
 				bitmap = BitmapFactory.decodeStream(istream, null, mMinSideLength, mMaxNumOfPixels);
 			} else {
-				final String pathName = uri.toString();
-				bitmap = BitmapFactory.decodeFile(pathName, mMinSideLength, mMaxNumOfPixels);
+				String pathName = uri.toString();
+				if (ContentResolver.SCHEME_FILE.equals(scheme))
+					pathName = uri.getPath();
+				InputStream istream = null;
+				if (pathName.startsWith(ANDROID_ASSET))
+					istream = mContext.getAssets().open(pathName.substring(ANDROID_ASSET.length()));
+				else
+					istream = new FileInputStream(pathName);
+				bitmap = BitmapFactory.decodeStream(istream, null, mMinSideLength, mMaxNumOfPixels);
 			}
 		} catch (Exception e) {
 			bitmap = null;
