@@ -71,6 +71,7 @@ import android.widget.AdapterView;
 
 import com.iwares.lib.booster.annotation.IntentExtra;
 import com.iwares.lib.booster.annotation.OnClick;
+import com.iwares.lib.booster.annotation.OnFocusChanged;
 import com.iwares.lib.booster.annotation.OnItemClick;
 import com.iwares.lib.booster.annotation.OnItemLongClick;
 import com.iwares.lib.booster.annotation.OnItemSelected;
@@ -375,6 +376,35 @@ public class Booster {
 
 	}
 
+	private static class ViewOnFocusChangedListener implements View.OnFocusChangeListener {
+
+		public final WeakReference<Object> mReceiverRef;
+
+		public final Method mMethod;
+
+		public ViewOnFocusChangedListener(Object receiver, Method method) {
+			mReceiverRef = new WeakReference<Object>(receiver);
+			mMethod = method;
+		}
+
+		@Override
+		public void onFocusChange(View v, boolean hasFocus) {
+			try {
+				Object receiver = mReceiverRef.get();
+				if (receiver == null)
+					return;
+				Method method = mMethod;
+				boolean isAccessible = method.isAccessible();
+				method.setAccessible(true);
+				method.invoke(receiver, v, hasFocus);
+				method.setAccessible(isAccessible);
+			} catch (Exception e) {
+				throw new RuntimeException("Faild to invoke" + mMethod.getName(), e);
+			}
+		}
+
+	}
+
 	/**
 	 * This method registers all annotated methods of 'object' to corresponding
 	 * {@link View}s that find form 'target'. To make this method working correctly,
@@ -443,6 +473,15 @@ public class Booster {
 						View view = (View)findViewById.invoke(source, ids[j]);
 						ViewOnTouchListener listener = new ViewOnTouchListener(target, method);
 						view.setOnTouchListener(listener);
+					}
+				}
+				// Register View.OnFocusChangedListener
+				if (method.isAnnotationPresent(OnFocusChanged.class)) {
+					int[] ids = method.getAnnotation(OnFocusChanged.class).value();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						View view = (View)findViewById.invoke(source, ids[j]);
+						ViewOnFocusChangedListener listener = new ViewOnFocusChangedListener(target, method);
+						view.setOnFocusChangeListener(listener);
 					}
 				}
 			}
