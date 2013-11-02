@@ -60,6 +60,7 @@ import android.os.Vibrator;
 import android.os.storage.StorageManager;
 import android.service.wallpaper.WallpaperService;
 import android.telephony.TelephonyManager;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -68,9 +69,11 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.textservice.TextServicesManager;
 import android.widget.AdapterView;
+import android.widget.TextView;
 
 import com.iwares.lib.booster.annotation.IntentExtra;
 import com.iwares.lib.booster.annotation.OnClick;
+import com.iwares.lib.booster.annotation.OnEditorAction;
 import com.iwares.lib.booster.annotation.OnFocusChanged;
 import com.iwares.lib.booster.annotation.OnItemClick;
 import com.iwares.lib.booster.annotation.OnItemLongClick;
@@ -405,6 +408,36 @@ public class Booster {
 
 	}
 
+	private static class TextViewOnEditorActionListener implements TextView.OnEditorActionListener {
+
+		public final WeakReference<Object> mReceiverRef;
+
+		public final Method mMethod;
+
+		public TextViewOnEditorActionListener(Object receiver, Method method) {
+			mReceiverRef = new WeakReference<Object>(receiver);
+			mMethod = method;
+		}
+
+		@Override
+		public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+			try {
+				Object receiver = mReceiverRef.get();
+				if (receiver == null)
+					return false;
+				Method method = mMethod;
+				boolean isAccessible = method.isAccessible();
+				method.setAccessible(true);
+				boolean result = (Boolean)mMethod.invoke(receiver, v, actionId, event);
+				method.setAccessible(isAccessible);
+				return result;
+			} catch (Exception e) {
+				throw new RuntimeException("Faild to invoke" + mMethod.getName(), e);
+			}
+		}
+
+	}
+
 	/**
 	 * This method registers all annotated methods of 'object' to corresponding
 	 * {@link View}s that find form 'target'. To make this method working correctly,
@@ -482,6 +515,15 @@ public class Booster {
 						View view = (View)findViewById.invoke(source, ids[j]);
 						ViewOnFocusChangedListener listener = new ViewOnFocusChangedListener(target, method);
 						view.setOnFocusChangeListener(listener);
+					}
+				}
+				// Register TextView.OnEditorActionListener
+				if (method.isAnnotationPresent(OnEditorAction.class)) {
+					int[] ids = method.getAnnotation(OnEditorAction.class).value();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						TextView view = (TextView)findViewById.invoke(source, ids[j]);
+						TextViewOnEditorActionListener listener = new TextViewOnEditorActionListener(target, method);
+						view.setOnEditorActionListener(listener);
 					}
 				}
 			}
