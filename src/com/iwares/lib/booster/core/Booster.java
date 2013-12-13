@@ -73,15 +73,24 @@ import android.widget.TextView;
 
 import com.iwares.lib.booster.annotation.IntentExtra;
 import com.iwares.lib.booster.annotation.OnClick;
+import com.iwares.lib.booster.annotation.OnClickEx;
 import com.iwares.lib.booster.annotation.OnEditorAction;
+import com.iwares.lib.booster.annotation.OnEditorActionEx;
 import com.iwares.lib.booster.annotation.OnFocusChanged;
+import com.iwares.lib.booster.annotation.OnFocusChangedEx;
 import com.iwares.lib.booster.annotation.OnItemClick;
+import com.iwares.lib.booster.annotation.OnItemClickEx;
 import com.iwares.lib.booster.annotation.OnItemLongClick;
+import com.iwares.lib.booster.annotation.OnItemLongClickEx;
 import com.iwares.lib.booster.annotation.OnItemSelected;
+import com.iwares.lib.booster.annotation.OnItemSelectedEx;
 import com.iwares.lib.booster.annotation.OnLongClick;
+import com.iwares.lib.booster.annotation.OnLongClickEx;
 import com.iwares.lib.booster.annotation.OnTouch;
+import com.iwares.lib.booster.annotation.OnTouchEx;
 import com.iwares.lib.booster.annotation.SystemService;
 import com.iwares.lib.booster.annotation.ViewById;
+import com.iwares.lib.booster.annotation.ViewByIdEx;
 import com.iwares.lib.booster.annotation.ViewFromLayout;
 
 public class Booster {
@@ -92,24 +101,37 @@ public class Booster {
 	 * correctly, the 'source' must provides a {@code void findViewById(int id)} method.
 	 * 
 	 * @param target An object who's fields will be injected.
+	 * @param targetClass Class of the target.
 	 * @param source An object which contains corresponding {@link View}s.
 	 * 
 	 * @see {@link ViewById}
 	 * 
 	 */
-	public static final void injectViews(Object target, Object source) {
+	public static final void injectViews(Object target, Class<?> targetClass, Object source) {
 		try {
 			// Prepare findViewById method for injecting @ViewById fields.
 			Method findViewById = null;
 			findViewById = source.getClass().getMethod("findViewById", int.class);
 
 			// Get all fields form target object.
-			Field[] fields = target.getClass().getDeclaredFields();
+			Field[] fields = targetClass.getDeclaredFields();
 			for (int i = 0, c = fields.length; i < c; ++i) {
 				Field field = fields[i];
 				// Process @ViewById annotation.
-				if (findViewById != null && field.isAnnotationPresent(ViewById.class)) {
+				if (field.isAnnotationPresent(ViewById.class)) {
 					int id = field.getAnnotation(ViewById.class).value();
+					View view = (View)findViewById.invoke(source, id);
+					boolean isAccessible = field.isAccessible();
+					field.setAccessible(true);
+					field.set(target, view);
+					field.setAccessible(isAccessible);
+				}
+				// Process @ViewByIdEx annotation.
+				if (field.isAnnotationPresent(ViewByIdEx.class)) {
+					ViewByIdEx annotation = field.getAnnotation(ViewByIdEx.class);
+					Class<?> cls = annotation.cls();
+					String ids = annotation.id();
+					int id = cls.getField(ids).getInt(null);
 					View view = (View)findViewById.invoke(source, id);
 					boolean isAccessible = field.isAccessible();
 					field.setAccessible(true);
@@ -123,16 +145,13 @@ public class Booster {
 	}
 
 	/**
-	 * Is equivalent to calling {@link #injectViews(object, object)}
+	 * Is equivalent to calling {@link #injectViews(object, objectClass, object)
 	 * 
 	 * @param object The object which wants to inject {@link View}s to.
-	 * 
-	 * @see {@link #injectViews(Object target, Object source)}
-	 * @see {@link ViewById}
-	 * 
+	 * @param objectClass Class of the object, if null, use object.getClass().
 	 */
-	public static final void injectViews(Object object) {
-		injectViews(object, object);
+	public static final void injectViews(Object object, Class<?> objectClass) {
+		injectViews(object, objectClass, object);
 	}
 
 	/**
@@ -142,13 +161,14 @@ public class Booster {
 	 * {@code Context getContext()} method.
 	 * 
 	 * @param target An object who's fields will be set to inflated {@link View}s.
+	 * @param targetClass Class of the target.
 	 * @param source An {@link Context} object or an an object which provides a
 	 *        {@code Context getContext()} method.
 	 * 
 	 * @see {@link ViewFromLayout}
 	 * 
 	 */
-	public static final void inflateLayouts(Object target, Object source) {
+	public static final void inflateLayouts(Object target, Class<?> targetClass, Object source) {
 		try {
 			// Prepare Context object for inflating @ViewFromLayout fields.
 			Context context = null;
@@ -166,7 +186,7 @@ public class Booster {
 				throw new RuntimeException("Context not found.");
 
 			// Get all fields form target object.
-			Field[] fields = target.getClass().getDeclaredFields();
+			Field[] fields = targetClass.getDeclaredFields();
 			for (int i = 0, c = fields.length; i < c; ++i) {
 				Field field = fields[i];
 				// Process @ViewFromLayout annotation.
@@ -188,13 +208,14 @@ public class Booster {
 	 * Is equivalent to calling {@link #inflateLayouts(object, object)}
 	 * 
 	 * @param object The object which wants to inflate layouts to.
+	 * @param objectClass Class of the object.
 	 * 
 	 * @see {@link #inflateLayouts(Object target, Object source)}
 	 * @see {@link ViewFromLayout}
 	 * 
 	 */
-	public static final void inflateLayouts(Object object) {
-		inflateLayouts(object, object);
+	public static final void inflateLayouts(Object object, Class<?> objectClass) {
+		inflateLayouts(object, objectClass, object);
 	}
 
 	private static class ViewOnClickListener implements View.OnClickListener {
@@ -444,14 +465,15 @@ public class Booster {
 	 * the 'source' must provides a {@code void findViewById(int id)} method.
 	 * 
 	 * @param target An object which contains annotated methods.
+	 * @param targetClass Class of the target.
 	 * @param source An object which contains corresponding {@link View}s.
 	 * 
 	 */
-	public static final void registerListeners(Object target, Object source) {
+	public static final void registerListeners(Object target, Class<?> targetClass, Object source) {
 		try {
 			// Prepare findViewById method for register listeners
 			Method findViewById = source.getClass().getMethod("findViewById", int.class);
-			Method[] methods = target.getClass().getDeclaredMethods();
+			Method[] methods = targetClass.getDeclaredMethods();
 			for (int i = 0, c = methods.length; i < c; ++i) {
 				Method method = methods[i];
 				// Register View.OnClickListener
@@ -459,6 +481,17 @@ public class Booster {
 					int[] ids = method.getAnnotation(OnClick.class).value();
 					for (int j = 0, d = ids.length; j < d; ++j) {
 						View view = (View)findViewById.invoke(source, ids[j]);
+						ViewOnClickListener listener = new ViewOnClickListener(target, method);
+						view.setOnClickListener(listener);
+					}
+				}
+				if (method.isAnnotationPresent(OnClickEx.class)) {
+					OnClickEx annotation = method.getAnnotation(OnClickEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						View view = (View)findViewById.invoke(source, id);
 						ViewOnClickListener listener = new ViewOnClickListener(target, method);
 						view.setOnClickListener(listener);
 					}
@@ -472,11 +505,33 @@ public class Booster {
 						view.setOnLongClickListener(listener);
 					}
 				}
+				if (method.isAnnotationPresent(OnLongClickEx.class)) {
+					OnLongClickEx annotation = method.getAnnotation(OnLongClickEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						View view = (View)findViewById.invoke(source, id);
+						ViewOnLongClickListener listener = new ViewOnLongClickListener(target, method);
+						view.setOnLongClickListener(listener);
+					}
+				}
 				// Register AdapterView.OnItemClickListener
 				if (method.isAnnotationPresent(OnItemClick.class)) {
 					int[] ids = method.getAnnotation(OnItemClick.class).value();
 					for (int j = 0, d = ids.length; j < d; ++j) {
 						AdapterView<?> view = (AdapterView<?>)findViewById.invoke(source, ids[j]);
+						AdapterViewOnItemClickListener listener = new AdapterViewOnItemClickListener(target, method);
+						view.setOnItemClickListener(listener);
+					}
+				}
+				if (method.isAnnotationPresent(OnItemClickEx.class)) {
+					OnItemClickEx annotation = method.getAnnotation(OnItemClickEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						AdapterView<?> view = (AdapterView<?>)findViewById.invoke(source, id);
 						AdapterViewOnItemClickListener listener = new AdapterViewOnItemClickListener(target, method);
 						view.setOnItemClickListener(listener);
 					}
@@ -490,11 +545,33 @@ public class Booster {
 						view.setOnItemLongClickListener(listener);
 					}
 				}
+				if (method.isAnnotationPresent(OnItemLongClickEx.class)) {
+					OnItemLongClickEx annotation = method.getAnnotation(OnItemLongClickEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						AdapterView<?> view = (AdapterView<?>)findViewById.invoke(source, id);
+						AdapterViewOnItemLongClickListener listener = new AdapterViewOnItemLongClickListener(target, method);
+						view.setOnItemLongClickListener(listener);
+					}
+				}
 				// Register AdapterView.OnItemSelectedListener
 				if (method.isAnnotationPresent(OnItemSelected.class)) {
 					int[] ids = method.getAnnotation(OnItemSelected.class).value();
 					for (int j = 0, d = ids.length; j < d; ++j) {
 						AdapterView<?> view = (AdapterView<?>)findViewById.invoke(source, ids[j]);
+						AdapterViewOnItemSelectedListener listener = new AdapterViewOnItemSelectedListener(target, method);
+						view.setOnItemSelectedListener(listener);
+					}
+				}
+				if (method.isAnnotationPresent(OnItemSelectedEx.class)) {
+					OnItemSelectedEx annotation = method.getAnnotation(OnItemSelectedEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						AdapterView<?> view = (AdapterView<?>)findViewById.invoke(source, id);
 						AdapterViewOnItemSelectedListener listener = new AdapterViewOnItemSelectedListener(target, method);
 						view.setOnItemSelectedListener(listener);
 					}
@@ -508,6 +585,17 @@ public class Booster {
 						view.setOnTouchListener(listener);
 					}
 				}
+				if (method.isAnnotationPresent(OnTouchEx.class)) {
+					OnTouchEx annotation = method.getAnnotation(OnTouchEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						View view = (View)findViewById.invoke(source, id);
+						ViewOnTouchListener listener = new ViewOnTouchListener(target, method);
+						view.setOnTouchListener(listener);
+					}
+				}
 				// Register View.OnFocusChangedListener
 				if (method.isAnnotationPresent(OnFocusChanged.class)) {
 					int[] ids = method.getAnnotation(OnFocusChanged.class).value();
@@ -517,11 +605,33 @@ public class Booster {
 						view.setOnFocusChangeListener(listener);
 					}
 				}
+				if (method.isAnnotationPresent(OnFocusChangedEx.class)) {
+					OnFocusChangedEx annotation = method.getAnnotation(OnFocusChangedEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						View view = (View)findViewById.invoke(source, id);
+						ViewOnFocusChangedListener listener = new ViewOnFocusChangedListener(target, method);
+						view.setOnFocusChangeListener(listener);
+					}
+				}
 				// Register TextView.OnEditorActionListener
 				if (method.isAnnotationPresent(OnEditorAction.class)) {
 					int[] ids = method.getAnnotation(OnEditorAction.class).value();
 					for (int j = 0, d = ids.length; j < d; ++j) {
 						TextView view = (TextView)findViewById.invoke(source, ids[j]);
+						TextViewOnEditorActionListener listener = new TextViewOnEditorActionListener(target, method);
+						view.setOnEditorActionListener(listener);
+					}
+				}
+				if (method.isAnnotationPresent(OnEditorActionEx.class)) {
+					OnEditorActionEx annotation = method.getAnnotation(OnEditorActionEx.class);
+					Class<?> cls = annotation.cls();
+					String[] ids = annotation.id();
+					for (int j = 0, d = ids.length; j < d; ++j) {
+						int id = cls.getField(ids[j]).getInt(null);
+						TextView view = (TextView)findViewById.invoke(source, id);
 						TextViewOnEditorActionListener listener = new TextViewOnEditorActionListener(target, method);
 						view.setOnEditorActionListener(listener);
 					}
@@ -536,12 +646,13 @@ public class Booster {
 	 * Is equivalent to calling {@link #registerListeners(object, object)}
 	 * 
 	 * @param object The object which wants to register listeners to.
+	 * @param objectClass Class of the object.
 	 * 
 	 * @see {@link #registerListeners(Object target, Object source)}
 	 * 
 	 */
-	public static final void registerListeners(Object object) {
-		registerListeners(object, object);
+	public static final void registerListeners(Object object, Class<?> objectClass) {
+		registerListeners(object, objectClass, object);
 	}
 
 	/**
@@ -551,6 +662,7 @@ public class Booster {
 	 * {@code Context getContext()} method.
 	 * 
 	 * @param target An object who's fields will be initialized.
+	 * @param targetClass Class of the target.
 	 * @param source An {@link Context} object or an an object which provides a
 	 *        {@code Context getContext()} method.
 	 * 
@@ -559,7 +671,7 @@ public class Booster {
 	 */
 	@TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
 	@SuppressWarnings("deprecation")
-	public static final void bindSystemServices(Object target, Object source) {
+	public static final void bindSystemServices(Object target, Class<?> targetClass, Object source) {
 		try {
 			// Prepare Context object for binding @SystemService fields.
 			Context context = null;
@@ -577,7 +689,7 @@ public class Booster {
 				throw new RuntimeException("Context not found.");
 
 			// Get all fields form target.
-			Field[] fields = target.getClass().getDeclaredFields();
+			Field[] fields = targetClass.getDeclaredFields();
 			for (int i = 0, c = fields.length; i < c; ++i) {
 				Field field = fields[i];
 				if (!field.isAnnotationPresent(SystemService.class))
@@ -687,16 +799,17 @@ public class Booster {
 	 * Is equivalent to calling {@link #bindSystemServices(object, object)}
 	 * 
 	 * @param object The object which wants to bind system services to.
+	 * @param objectClass Class of the object.
 	 * 
 	 * @see {@link #bindSystemServices(Object target, Object source)}
 	 * @see {@link SystemService}
 	 * 
 	 */
-	public static final void bindSystemServices(Object object) {
-		bindSystemServices(object, object);
+	public static final void bindSystemServices(Object object, Class<?> objectClass) {
+		bindSystemServices(object, objectClass, object);
 	}
 
-	public static final void obtainIntentExtras(Object target, Object source) {
+	public static final void obtainIntentExtras(Object target, Class<?> targetClass, Object source) {
 		try {
 			// Prepare Intent object for injecting @IntentExtra fields.
 			Intent intent = null;
@@ -714,7 +827,7 @@ public class Booster {
 				throw new RuntimeException("Intent not found.");
 	
 			// Get all fields form target object.
-			Field[] fields = target.getClass().getDeclaredFields();
+			Field[] fields = targetClass.getDeclaredFields();
 			for (int i = 0, c = fields.length; i < c; ++i) {
 				Field field = fields[i];
 				// Process @IntentExtra annotation.
@@ -790,8 +903,8 @@ public class Booster {
 		}
 	}
 
-	public static final void obtainIntentExtras(Object object) {
-		obtainIntentExtras(object, object);
+	public static final void obtainIntentExtras(Object object, Class<?> objectClass) {
+		obtainIntentExtras(object, objectClass, object);
 	}
 
 }
