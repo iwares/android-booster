@@ -155,6 +155,40 @@ public class Booster {
 	}
 
 	/**
+	 * This method siphon all fields(setting them to null) with {@link ViewById}
+	 * annotation. This is useful for Fragments: In some case, Fragment will
+	 * destroy it Views, so you have to set all injected fields to null to make
+	 * the destroyed views be collected by the GC.
+	 * 
+	 * @param target
+	 *            An object who's fields will be siphoned.
+	 * @param targetClass
+	 *            Class of the target.
+	 * 
+	 * @see {@link ViewById}
+	 * @see {@link #injectViews(Object, Class, Object)}
+	 * @see {@link #injectViews(Object, Class)}
+	 * 
+	 */
+	public static final void siphonViews(Object target, Class<?> targetClass) {
+		try {
+			Field[] fields = targetClass.getDeclaredFields();
+			for (int i = 0, c = fields.length; i < c; ++i) {
+				Field field = fields[i];
+				if (field.isAnnotationPresent(ViewById.class)
+						|| field.isAnnotationPresent(ViewByIdEx.class)) {
+					boolean isAccessible = field.isAccessible();
+					field.setAccessible(true);
+					field.set(target, null);
+					field.setAccessible(isAccessible);
+				}
+			}
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to inject Views", e);
+		}
+	}
+
+	/**
 	 * This method inflates {@link View}s according to {@link ViewFormLayout}
 	 * annotations of 'object' and assigns them to corresponding fields. To make this
 	 * method working correctly, the 'source' object must be a Context or provides a
